@@ -8,25 +8,25 @@
 typedef struct node { 
     int key; 
     int val;
-    struct node **next; 
+    struct node **forward; 
 } node;
 
-//list struct
+//skiplist struct
 typedef struct skiplist{
 	int level;
 	int size;
-	struct node *first;
+	struct node *header;
 } skiplist;
 
 //initialize method
 skiplist* initalize(skiplist * list){
-	node *first = (node *)malloc(sizeof(struct node));
-	list->first = first;
-	first->key = 0;
-	first->next = (node **)malloc(sizeof(node*) * MAX_LEVEL + 1);
+	node *header = (node *)malloc(sizeof(struct node));
+	list->header = header;
+	header->key = 0;
+	header->forward = (node **)malloc(sizeof(node*) * MAX_LEVEL + 1);
 
 	for (int i = 0; i < MAX_LEVEL; i++){
-		first->next[i] = list->first;
+		header->forward[i] = list->header;
 	}
 
 	list->level = 1;
@@ -35,110 +35,164 @@ skiplist* initalize(skiplist * list){
 	return list;
 }
 
-// random level
-int get_level(){
-	int level = 1;
+	// randomLevel()
+	// newLevel := 1
+	// -- random0 returns a random value in [O...l)
+	// while random0 -Z p do
+	// newLevel := newLevel + 1
+	// return min(newLevel, MaxLevel) 
+int random_level(){
+	int new_level = 1;
 	int random_max = 10;
-	while (rand() < random_max /2 && level < MAX_LEVEL){
-		level++;
+	while (rand() < random_max /2 && new_level < MAX_LEVEL){
+		new_level++;
 	}
-	return level;
+	return new_level;
 }
 
+	// Insert(list, searchKey, newvalue)
+	// local update[l ..MaxLevel]
+	// x := list-+header
+	// for i := list+level downto 1 do
+	// while x+forward[i]+key c searchKey do
+	// x := x+forward[i]
+	// -- x+key < searchKey I x+fonuard[i]+key
+	// update[i] := x
+	// x := x+forward[l]
+	// if x+key = searchKey then x+value := newValue
+	// else
+	// newLevel := randomLevel()
+	// if newLevel > list+level then
+	// for i := lisblevel + 1 to newLevel do
+	// update[i] := listjheader
+	// list+level := newLevel
+	// x := makeNode(newLevel, searchKey, value)
+	// for i := 1 to newLevel do
+	// x+forward[i] := update[i]-+forward[i]
+	// update[i]-+forward[i] := x 
 void add(skiplist *list, int key, int val) {
     node *update[MAX_LEVEL + 1];
-    node *x = list->first;
-    int i, level;
+    node *x = list->header;
+    int i;
     for (i = list->level; i >= 1; i--) {
-        while (x->next[i]->key < key)
-            x = x->next[i];
+        while (x->forward[i]->key < key && x->forward[i]->key != 0){
+            x = x->forward[i];
+        }
         update[i] = x;
     }
-    x = x->next[1];
+    x = x->forward[1];
  
-    if (key == x->key) {
+    if (x->key == key) {
         x->val = val;
-        return;
     } else {
-        level = get_level();
-        if (level > list->level) {
-            for (i = list->level + 1; i <= level; i++) {
-                update[i] = list->first;
+        int new_level = random_level();
+        if (new_level > list->level) {
+            for (i = list->level + 1; i <= new_level; i++) {
+                update[i] = list->header;
             }
-            list->level = level;
+            list->level = new_level;
         }
- 
+ 		
+ 		//make node
         x = (node *) malloc(sizeof(node));
         x->key = key;
         x->val = val;
-        x->next = (node **) malloc(sizeof(node*) * (level + 1));
-        for (i = 1; i <= level; i++) {
-            x->next[i] = update[i]->next[i];
-            update[i]->next[i] = x;
+        x->forward = (node **) malloc(sizeof(node*) * (new_level + 1));
+        for (i = 1; i <= new_level; i++) {
+            x->forward[i] = update[i]->forward[i];
+            update[i]->forward[i] = x;
         }
     }
     return;
 }
 
+	// Search(list, searchKey)
+	// x := lisbheader
+	// -- loop invariant: x-+key < searchKey
+	// for i := list+level downto 1 do
+	// while x-+fotward[i]+key c searchKey do
+	// x := x+forward[i]
+	// -- x+key < searchKey I x+forward[ I] +key
+	// x := x+forward[l]
+	// if x-+key = searchKey then return x+value
+	// else return failure 
 int search(skiplist *list, int key){
-	node *x = list->first;
-	for (int i = 0; i < list->level; i++){
-		while (x->next[i]->key < key){
-			x = x->next[i];
-		}
-		if (x->next[1]->key == key){
-			return x->next[1]->val;
-		} else return 0;
-	}
+	node *x = list->header;
+	for (int i = list->level; i >= 1; i--) {
+        while (x->forward[i]->key < key && x->forward[i]->key != 0){
+            x = x->forward[i];
+        }
+    }
+    x = x->forward[1];
+    if (x->key == key){
+    	return x->val;
+    }
 	return 0;
 }
 
-void skiplist_node_free(node *x) {
-    if (x) {
-        free(x->next);
-        free(x);
-    }
-}
-
+	// Delete(list, searchKey)
+	// local update[l ..MaxLevel]
+	// x := list-+header
+	// for i := list-+level downto 1 do
+	// while x+forward[i]+key c searchKey do
+	// x := x+forward[i]
+	// update[i] := x
+	// x := x+forward[ I]
+	// if x-+key = searchKey then
+	// for i := 1 to lisblevel do
+	// if update[i]-+forward[i] # x then break
+	// update[i]+forward[i] := x-+forward[i]
+	// free(x)
+	// while list+level > 1 and
+	// list+header-+forward[list+level] = NIL do
+	// list+level := list+level - 1 
 void delete(skiplist *list, int key) {
     int i;
     node *update[MAX_LEVEL + 1];
-    node *x = list->first;
+    node *x = list->header;
     for (i = list->level; i >= 1; i--) {
-        while (x->next[i]->key < key)
-            x = x->next[i];
+        while (x->forward[i]->key < key && x->forward[i]->key != 0){
+            x = x->forward[i];
+        }
         update[i] = x;
     }
  
-    x = x->next[1];
+    x = x->forward[1];
     if (x->key == key) {
         for (i = 1; i <= list->level; i++) {
-            if (update[i]->next[i] != x)
+            if (update[i]->forward[i] != x)
                 break;
-            update[i]->next[1] = x->next[i];
+            update[i]->forward[1] = x->forward[i];
         }
-        skiplist_node_free(x);
+
+        free(x->forward);
+        free(x);
  
-        while (list->level > 1 && list->first->next[list->level]
-                == list->first)
+        while (list->level > 1 && list->header->forward[list->level]
+                == list->header)
             list->level--;
-        return;
     }
     return;
 }
 
 void print(skiplist *list) {
-    node *x = list->first;
-    while (x && x->next[1] != list->first) {
-        printf("%d[%d]->", x->next[1]->key, x->next[1]->val);
-        x = x->next[1];
+    node *x = list->header;
+    printf("(");
+    while (x && x->forward[1] != list->header) {
+        printf("(%d,%d)", x->forward[1]->key, x->forward[1]->val);
+        x = x->forward[1];
+        if (x->forward[1]->key != 0){
+        	printf(",");
+        }
     }
+    printf(")\n");
+    return;
 }
 
-
 int main(){
-	skiplist list;
-    initalize(&list);
+	skiplist* list;
+    list = initalize(list);
+
     //char line[1024];
 
     char command[10];
@@ -147,30 +201,39 @@ int main(){
 
 	char *line = NULL;
 	size_t  n = 1024;
+	ssize_t read = 0;
 
-    strcpy(command, "temp");//might not need
+	while (1){
+		read = getline(&line, &n, stdin);
 
-	while(strcmp(command, "quit") != 0){
+		if(read == -1){
+			printf("failure with getline()");
+			exit(1);
+		}
+		if (read > 0 && line[read - 1] == '\n'){
+			line[read - 1] = '\0';
+		}
 
-		getline(&line, &n, stdin);
-
-		int len = strlen(line);
-		printf("last char is %c", line[len]);
-
-		sscanf(line, " %s%d%d", command, &key, &val);
+		sscanf(line, "%s %d %d", command, &key, &val);
 
 		if (strcmp(command, "add") == 0){
-			printf("true");
-			add(&list, key, val);
-		} else if (strcmp(command, "search") == 0){
-			printf("%d\n", search(&list, key));
-		} else if (strcmp(command, "delete") == 0){
-			delete(&list, key);
-		} else if (strcmp(command, "print\n") == 0){
-			print(&list);
-		} else if (strcmp(command, "quit") == 0){
-			exit(0);
+			add(list, key, val);
 		}
+		if(strcmp(command, "search") == 0){
+			printf("%d\n", search(list, key));
+		}
+		if(strcmp(command, "delete") == 0){
+			delete(list, key);
+		}
+		if(strcmp(command, "print") == 0){
+			print(list);
+		}
+		if(strncmp(command, "quit", 3)==0){
+			exit(1);
+		}
+
+		free(line);
+		line = NULL;
 	}
 	return 0;
 }
